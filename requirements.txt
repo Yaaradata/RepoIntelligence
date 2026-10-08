@@ -1,0 +1,6 @@
+psycopg[binary]>=3.2
+psycopg-pool>=3.2
+requests>=2.32
+PyYAML>=6.0
+tomli>=2.0; python_version < "3.11"
+pytest>=8.0

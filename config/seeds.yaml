@@ -1,0 +1,9 @@
+# Lane E — SEEDED. Human nominations and curated sources.
+# Entries are owner/name for convenience only; identity resolves them to the
+# numeric repo_id before anything is stored.
+nominations: []
+#  - repo: owner/name
+#    nominated_by: ranjith
+#    note: why it was nominated
+
+blocklist_owners: []

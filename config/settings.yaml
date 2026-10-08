@@ -1,0 +1,56 @@
+# Non-secret tunables. Environment variables of the same (upper-cased) name win.
+# Thresholds here are defaults from the V1 spec; change values, not code.
+
+discovery:
+  new_lane_created_within_days: 30
+  new_lane_pushed_within_days: 7
+  min_stars_new_lane: 3
+  popular_min_stars: 2000
+  popular_min_downloads: 50000
+  popular_pushed_within_days: 14
+  search_result_cap: 1000          # GitHub search hard cap per query
+  topic_groups:
+    - "topic:ai topic:machine-learning topic:llm"
+    - "topic:developer-tools topic:cli"
+    - "topic:data-engineering topic:database"
+    - "topic:security topic:devsecops"
+    - "topic:agents topic:rag topic:evaluation"
+
+snapshot:
+  fixed_weekday: 6                 # Sunday (Mon=0). Weekly watchlist snapshot day.
+  releases_per_repo: 10
+  release_body_chars: 3000
+  readme_excerpt_chars: 8000
+  commit_activity_retries: 3
+  commit_activity_retry_sleep: 2.0
+
+eligibility:
+  min_stars: 10
+  min_contributors: 3
+  min_showhn_points: 50
+  min_downloads_30d: 1000
+  min_readme_length: 200
+
+showhn:
+  min_confidence_for_scoring: 0.70
+  snapshot_offsets_hours: [6, 24, 48]
+
+momentum:
+  z_threshold: 2.0
+  min_abs_delta: 15
+  bayes_prior_k: 5
+  cohorts:                         # upper bound in days (inclusive)
+    nascent: 7
+    young: 30
+    growing: 180
+
+cooldown_days:
+  default: 90
+  MAJOR_RELEASE: 0
+  SECURITY_ADVISORY: 0
+  MINOR_RELEASE: 60
+  CAPABILITY_CHANGE: 60
+  MOMENTUM_SPIKE: 90
+  SHOWHN_SURGE: 90
+  ADOPTION_MILESTONE: 120
+  FIRST_SEEN: null                 # once only
