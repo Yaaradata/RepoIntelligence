@@ -56,6 +56,33 @@ def test_unknown_low_column_is_flagged_without_an_invented_cause():
     assert "no known cause recorded" in text
 
 
+def test_zero_of_thirty_nine_is_never_populated():
+    stat = report.coverage_stat("commits_7d", 0, 39)
+    text = report.format_coverage_line(stat)
+    assert stat["never_populated"] is True
+    assert stat["flagged"] is False
+    assert "<== NEVER POPULATED" in text
+    assert "<-" not in text
+    assert "0.0%" in text
+    assert "(0 / 39)" in text
+
+
+def test_zero_of_three_is_too_small_to_call_never_populated():
+    stat = report.coverage_stat("commits_7d", 0, 3)
+    text = report.format_coverage_line(stat)
+    assert stat["never_populated"] is False
+    assert "NEVER POPULATED" not in text
+
+
+def test_nineteen_of_thirty_nine_is_under_half_not_never_populated():
+    stat = report.coverage_stat("commits_7d", 19, 39)
+    text = report.format_coverage_line(stat)
+    assert stat["never_populated"] is False
+    assert stat["flagged"] is True
+    assert "<-" in text
+    assert "NEVER POPULATED" not in text
+
+
 def test_zero_repos_does_not_divide():
     stat = report.coverage_stat("stars", 0, 0)
     assert stat["pct"] is None

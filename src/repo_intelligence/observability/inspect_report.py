@@ -215,14 +215,18 @@ def coverage_stat(column: str, present: int, total: int) -> dict[str, Any]:
     """Percentage of repos whose latest snapshot has this column non-NULL."""
     if total <= 0:
         return {"column": column, "present": present, "total": total,
-                "pct": None, "flagged": False, "note": None}
+                "pct": None, "flagged": False, "never_populated": False, "note": None}
     pct = 100.0 * present / total
-    flagged = pct < 50.0
+    # Exactly 0% on a scope large enough to conclude is a wiring fault, not a
+    # sparse field. Smaller scopes stay on the ordinary under-50% marker.
+    never_populated = total >= 10 and present == 0
+    flagged = pct < 50.0 and not never_populated
     note = None
     if flagged:
         note = COVERAGE_NOTES.get(column) or "below 50%; no known cause recorded"
     return {"column": column, "present": present, "total": total,
-            "pct": pct, "flagged": flagged, "note": note}
+            "pct": pct, "flagged": flagged, "never_populated": never_populated,
+            "note": note}
 
 
 def coverage_from_counts(row: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -235,7 +239,12 @@ def coverage_from_counts(row: dict[str, Any] | None) -> list[dict[str, Any]]:
 def format_coverage_line(stat: dict[str, Any]) -> str:
     if stat["pct"] is None:
         return f"{stat['column']:<22}{'n/a':>7}   (0 / 0)"
-    flag = f"   <- {stat['note']}" if stat["flagged"] else ""
+    if stat.get("never_populated"):
+        flag = "   <== NEVER POPULATED"
+    elif stat["flagged"]:
+        flag = f"   <- {stat['note']}"
+    else:
+        flag = ""
     return (f"{stat['column']:<22}{stat['pct']:6.1f}%   "
             f"({stat['present']:,} / {stat['total']:,}){flag}")
 

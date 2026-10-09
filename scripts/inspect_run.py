@@ -44,6 +44,9 @@ def main() -> int:
                          sample=args.sample, confidence_bar=bar)
     text = render_json(report) if args.format == "json" else render_text(report)
     sys.stdout.write(text)
+    columns = (report.get("coverage") or {}).get("columns") or []
+    if any(stat.get("never_populated") for stat in columns):
+        return 2
     return 0 if report.get("run") is not None else 1
 
 
