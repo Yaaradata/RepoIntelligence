@@ -73,6 +73,19 @@ def build_snapshot(repo: dict[str, Any], *, open_prs: int | None, contributors: 
     }
 
 
+def apply_repo_limit(repos: list[dict[str, Any]], limit: int | None) -> list[dict[str, Any]]:
+    """Keep the first N rows of a list already ordered by repo_id.
+
+    ``None`` means no cap. A negative limit is rejected: ``repos[:n]`` with
+    ``n < 0`` would drop rows from the end instead of capping the front.
+    """
+    if limit is None:
+        return repos
+    if limit < 0:
+        raise ValueError("--limit must be >= 0")
+    return repos[:limit]
+
+
 def snapshot_scope(conn, scope: str, *, run_id: str | None = None, today: date | None = None) -> list[dict[str, Any]]:
     """watchlist: every non-excluded repo (fixed weekday only). new: repos never snapshotted.
     run: candidates of one discovery run."""

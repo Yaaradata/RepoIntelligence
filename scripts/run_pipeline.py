@@ -2,7 +2,7 @@
 """Phase 1 collection pipeline: discovery → identity → snapshot(new) → packages → Show HN.
 
   python scripts/run_pipeline.py --dry-run
-  python scripts/run_pipeline.py [--lanes new,popular,seed]
+  python scripts/run_pipeline.py [--lanes new,popular,seed] [--limit N]
 
 Free; no paid stages exist yet. Later phases extend this with --week,
 --allow-paid and --max-cost-usd.
@@ -26,7 +26,12 @@ def main() -> int:
     ap.add_argument("--lanes", default="new,popular,seed")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--trigger", default="manual", choices=["manual", "cron"])
+    ap.add_argument("--limit", type=int, default=None,
+                    help="process at most N repos in snapshot, packages and showhn. "
+                         "Discovery is not capped. Lowest repo_id first.")
     args = ap.parse_args()
+    if args.limit is not None and args.limit < 0:
+        raise SystemExit("--limit must be >= 0")
 
     from repo_intelligence.common.config import validate_setting_overrides
     validate_setting_overrides()
@@ -36,7 +41,7 @@ def main() -> int:
     from repo_intelligence.identity.stage import resolve_candidates
     from repo_intelligence.packages.stage import run_packages
     from repo_intelligence.showhn.match import run_match
-    from repo_intelligence.snapshot.stage import run_snapshot, snapshot_scope
+    from repo_intelligence.snapshot.stage import apply_repo_limit, run_snapshot, snapshot_scope
 
     gh = hn = None
     if not args.dry_run:
@@ -47,7 +52,8 @@ def main() -> int:
     now = datetime.now(timezone.utc)
     with connect() as conn:
         run_id = runs.start_pipeline_run(conn, "collection", trigger_type=args.trigger,
-                                         metadata={"lanes": args.lanes, "dry_run": args.dry_run})
+                                         metadata={"lanes": args.lanes, "dry_run": args.dry_run,
+                                                   "limit": args.limit})
         status, totals = "failed", {"ok": 0, "failed": 0}
 
         def stage(name, fn):
@@ -71,17 +77,19 @@ def main() -> int:
                                                      dry_run=args.dry_run))
             if not args.dry_run:
                 stage("identity", lambda: resolve_candidates(conn, gh, run_id))
-            new_repos = snapshot_scope(conn, "new")
-            stage("snapshot", lambda: run_snapshot(conn, gh, new_repos, scope_label="scope=new",
+            new_repos = apply_repo_limit(snapshot_scope(conn, "new"), args.limit)
+            per_repo = "scope=new" + (f" limit={args.limit}" if args.limit is not None else "")
+            stage("snapshot", lambda: run_snapshot(conn, gh, new_repos, scope_label=per_repo,
                                                    now=now, dry_run=args.dry_run))
             meta = conn.execute(
                 """SELECT repo_id, full_name, homepage, primary_language, package_ecosystem,
                           package_name, previous_full_names
-                   FROM repo_intelligence.github_repositories WHERE repo_id = ANY(%s)""",
+                   FROM repo_intelligence.github_repositories WHERE repo_id = ANY(%s)
+                   ORDER BY repo_id""",
                 ([r["repo_id"] for r in new_repos],)).fetchall()
-            stage("packages", lambda: run_packages(conn, gh, RegistryClient(), meta, scope_label="scope=new",
+            stage("packages", lambda: run_packages(conn, gh, RegistryClient(), meta, scope_label=per_repo,
                                                    today=now.date(), dry_run=args.dry_run))
-            stage("showhn", lambda: run_match(conn, hn, meta, scope_label="scope=new", now=now,
+            stage("showhn", lambda: run_match(conn, hn, meta, scope_label=per_repo, now=now,
                                               dry_run=args.dry_run))
             status = "succeeded"
         finally:

@@ -3,9 +3,9 @@
 
   python scripts/run_stage.py --stage discovery [--lanes new,popular,seed] [--dry-run]
   python scripts/run_stage.py --stage identity --run-id <uuid>
-  python scripts/run_stage.py --stage snapshot --scope new|watchlist|run [--run-id <uuid>]
-  python scripts/run_stage.py --stage packages --scope new|watchlist|run
-  python scripts/run_stage.py --stage showhn --scope new|watchlist|run
+  python scripts/run_stage.py --stage snapshot --scope new|watchlist|run [--run-id <uuid>] [--limit N]
+  python scripts/run_stage.py --stage packages --scope new|watchlist|run [--limit N]
+  python scripts/run_stage.py --stage showhn --scope new|watchlist|run [--limit N]
   python scripts/run_stage.py --stage showhn_refresh
 
 All Phase 1 stages are free. Paid stages (screen, editorial, selection, digest)
@@ -26,6 +26,10 @@ from repo_intelligence.common.db import connect  # noqa: E402
 from repo_intelligence.observability import runs  # noqa: E402
 
 STAGES = ["discovery", "identity", "snapshot", "packages", "showhn", "showhn_refresh"]
+
+
+def scope_label_for(scope: str, limit: int | None) -> str:
+    return f"scope={scope}" + (f" limit={limit}" if limit is not None else "")
 
 
 def repos_for_scope(conn, scope: str, run_id: str | None):
@@ -55,27 +59,33 @@ def run_one(conn, stage: str, args, run_id: str) -> object:
         return resolve_candidates(conn, GitHubClient(), args.run_id or run_id)
     if stage == "snapshot":
         from repo_intelligence.external.github import GitHubClient
-        from repo_intelligence.snapshot.stage import run_snapshot, snapshot_scope
+        from repo_intelligence.snapshot.stage import apply_repo_limit, run_snapshot, snapshot_scope
         weekday = config.setting("snapshot", "fixed_weekday", 6)
         if args.scope == "watchlist" and now.weekday() != weekday and not args.force_weekday:
             raise SystemExit(f"refusing watchlist snapshot: today is weekday {now.weekday()}, "
                              f"fixed snapshot weekday is {weekday} (pass --force-weekday to override)")
-        repos = snapshot_scope(conn, args.scope, run_id=args.run_id or run_id)
+        repos = apply_repo_limit(
+            snapshot_scope(conn, args.scope, run_id=args.run_id or run_id), args.limit)
         gh = None if args.dry_run else GitHubClient()
-        return run_snapshot(conn, gh, repos, scope_label=f"scope={args.scope}", now=now, dry_run=args.dry_run)
+        return run_snapshot(conn, gh, repos, scope_label=scope_label_for(args.scope, args.limit),
+                            now=now, dry_run=args.dry_run)
     if stage == "packages":
         from repo_intelligence.external.github import GitHubClient
         from repo_intelligence.external.registries import RegistryClient
         from repo_intelligence.packages.stage import run_packages
-        repos = repos_for_scope(conn, args.scope, args.run_id or run_id)
+        from repo_intelligence.snapshot.stage import apply_repo_limit
+        repos = apply_repo_limit(repos_for_scope(conn, args.scope, args.run_id or run_id), args.limit)
         gh = None if args.dry_run else GitHubClient()
-        return run_packages(conn, gh, RegistryClient(), repos, scope_label=f"scope={args.scope}",
+        return run_packages(conn, gh, RegistryClient(), repos,
+                            scope_label=scope_label_for(args.scope, args.limit),
                             today=now.date(), refresh_mapping=args.refresh_mapping, dry_run=args.dry_run)
     if stage == "showhn":
         from repo_intelligence.external.hackernews import HNClient
         from repo_intelligence.showhn.match import run_match
-        repos = repos_for_scope(conn, args.scope, args.run_id or run_id)
-        return run_match(conn, HNClient(), repos, scope_label=f"scope={args.scope}", now=now, dry_run=args.dry_run)
+        from repo_intelligence.snapshot.stage import apply_repo_limit
+        repos = apply_repo_limit(repos_for_scope(conn, args.scope, args.run_id or run_id), args.limit)
+        return run_match(conn, HNClient(), repos, scope_label=scope_label_for(args.scope, args.limit),
+                         now=now, dry_run=args.dry_run)
     if stage == "showhn_refresh":
         from repo_intelligence.external.hackernews import HNClient
         from repo_intelligence.showhn.match import run_refresh
@@ -93,15 +103,22 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--force-weekday", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--trigger", default="manual", choices=["manual", "cron"])
+    ap.add_argument("--limit", type=int, default=None,
+                    help="process at most N repos (snapshot/packages/showhn). "
+                         "Deterministic: lowest repo_id first, so repeated runs "
+                         "extend coverage instead of resampling.")
     return ap
 
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.limit is not None and args.limit < 0:
+        raise SystemExit("--limit must be >= 0")
     config.validate_setting_overrides()
     with connect() as conn:
         run_id = runs.start_pipeline_run(conn, f"stage.{args.stage}", trigger_type=args.trigger,
-                                         metadata={"scope": args.scope, "dry_run": args.dry_run})
+                                         metadata={"scope": args.scope, "dry_run": args.dry_run,
+                                                   "limit": args.limit})
         stage_run = runs.start_stage_run(conn, run_id, args.stage)
         status = "failed"
         try:
