@@ -84,3 +84,12 @@ def test_lane_weight_rows_share_signals_and_are_non_negative():
     for lane, weights in rows.items():
         assert set(weights) == signals, lane
         assert all(w >= 0 for w in weights.values()), lane
+
+
+def test_every_lane_weight_row_sums_to_one():
+    """Lanes are compared against each other, so a row summing to 1.05 would
+    inflate every repo in that lane by ~5% for purely arithmetic reasons."""
+    for lane, weights in load_policy("v001")["lane_weights"].items():
+        assert sum(weights.values()) == pytest.approx(1.0), (
+            f"{lane} sums to {sum(weights.values())}"
+        )
