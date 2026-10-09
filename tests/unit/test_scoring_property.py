@@ -45,6 +45,25 @@ def test_final_never_exceeds_ten():
     assert out["final"] == 10.0
 
 
+def test_out_of_range_percentiles_are_clamped_not_subtracted():
+    policy = load_policy("v001")
+    out = final_score(dims(7.0), momentum_pct=-0.5, adoption_pct=2.0,
+                      showhn_pct=0, popularity_pct=0, policy=policy)
+    assert out["boost_momentum"] == 0.0
+    assert out["boost_adoption"] == pytest.approx(policy["boost_caps"]["adoption"])
+    assert out["final"] >= out["usefulness"] * out["evidence_factor"]
+
+
+def test_out_of_range_evidence_strength_is_clamped():
+    policy = load_policy("v001")
+    low = final_score(dims(8.0, evidence=-3.0), momentum_pct=0, adoption_pct=0,
+                      showhn_pct=0, popularity_pct=0, policy=policy)
+    high = final_score(dims(8.0, evidence=99.0), momentum_pct=0, adoption_pct=0,
+                       showhn_pct=0, popularity_pct=0, policy=policy)
+    assert low["evidence_factor"] == pytest.approx(0.70)
+    assert high["evidence_factor"] == pytest.approx(1.00)
+
+
 def test_lane_weight_rows_share_signals_and_are_non_negative():
     rows = load_policy("v001")["lane_weights"]
     signals = set(rows["new"])
