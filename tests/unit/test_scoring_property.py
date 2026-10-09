@@ -12,13 +12,28 @@ def dims(level: float, evidence: float = 10.0) -> dict[str, float]:
     return {**{k: level for k in DIMS}, "evidence_strength": evidence}
 
 
-def test_high_usefulness_without_boosts_beats_lower_usefulness_with_every_boost_maxed():
+@pytest.mark.parametrize("evidence", [0.0, 2.5, 5.0, 7.5, 7.78, 8.0, 10.0])
+def test_usefulness_gap_beats_every_boost_at_all_evidence_levels(evidence):
+    """The property the design rests on, at every evidence level — not just 10.
+
+    A 1.5-point usefulness gap must survive every boost maxed. At total=1.4
+    this failed below evidence_strength 7.78.
+    """
     policy = load_policy("v001")
-    strong = final_score(dims(8.5), momentum_pct=0, adoption_pct=0, showhn_pct=0,
-                         popularity_pct=0, policy=policy)
-    boosted = final_score(dims(7.0), momentum_pct=1, adoption_pct=1, showhn_pct=1,
-                          popularity_pct=1, policy=policy)
-    assert strong["final"] > boosted["final"]
+    strong = final_score(dims(8.5, evidence), momentum_pct=0, adoption_pct=0,
+                         showhn_pct=0, popularity_pct=0, policy=policy)
+    boosted = final_score(dims(7.0, evidence), momentum_pct=1, adoption_pct=1,
+                          showhn_pct=1, popularity_pct=1, policy=policy)
+    assert strong["final"] > boosted["final"], (
+        f"at evidence_strength={evidence}: {strong['final']} !> {boosted['final']}"
+    )
+
+
+def test_boost_cap_is_derived_from_the_minimum_evidence_factor():
+    """Guards the derivation itself, so a future cap rise fails here first."""
+    policy = load_policy("v001")
+    min_ef = policy["evidence_factor"]["base"]          # evidence_strength = 0
+    assert policy["boost_caps"]["total"] < 1.5 * min_ef
 
 
 def test_total_boost_is_capped():
@@ -26,7 +41,6 @@ def test_total_boost_is_capped():
     out = final_score(dims(5.0), momentum_pct=1, adoption_pct=1, showhn_pct=1,
                       popularity_pct=1, policy=policy)
     assert out["boost_total"] == pytest.approx(policy["boost_caps"]["total"])
-    assert policy["boost_caps"]["total"] <= 1.4
 
 
 def test_evidence_factor_range():

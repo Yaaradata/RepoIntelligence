@@ -12,14 +12,16 @@ evidence_factor:
   base:  0.70
   slope: 0.03          # 0.70 + 0.03 * evidence_strength → 0.70 … 1.00
 
-# Total must stay <= 1.4 so 8.5 blinded usefulness with no boosts beats 7.0
-# with every boost maxed (tests/unit/test_scoring_property.py).
+# A repo 1.5 points higher in blinded usefulness must win at EVERY evidence
+# level, not only at evidence_strength 10. Minimum evidence_factor is 0.70,
+# so the cap must satisfy 1.5 * 0.70 > total, i.e. total < 1.05.
+# Per-signal caps still sum to 1.8; `total` is the binding constraint.
 boost_caps:
   momentum:   0.6
   adoption:   0.4
   showhn:     0.3
   popularity: 0.5
-  total:      1.4
+  total:      1.0
 
 lane_weights:          # which signals matter per lane (spec values; accelerating sums to 1.10)
   new:          {stars_lifetime: 0.00, star_growth: 0.15, accel: 0.10,
