@@ -12,12 +12,20 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cp .env.example .env     # DATABASE_URL, GITHUB_TOKEN (fine-grained, read-only public repos)
 ```
 
-Migrations live in `sql/migrations/` and are applied by a human, in order:
+Migrations live in `sql/migrations/` and are applied by a human, in order.
+`scripts/migrate.sh` sets `ON_ERROR_STOP=1`, stops at the first failure, and
+then runs `scripts/check_schema.py`. Agents must not run it.
 
 ```bash
-psql "$DATABASE_URL" -f sql/migrations/001_schema.sql
-psql "$DATABASE_URL" -f sql/migrations/002_events.sql
-psql "$DATABASE_URL" -f sql/migrations/003_scores.sql
+scripts/migrate.sh
+```
+
+Manual fallback, one file at a time:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/migrations/001_schema.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/migrations/002_events.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/migrations/003_scores.sql
 .venv/bin/python scripts/check_schema.py      # run this before diagnosing anything
 ```
 
