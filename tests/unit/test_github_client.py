@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -88,6 +88,40 @@ def test_search_paginates_until_short_page():
 def test_open_pr_counts_graphql_aliases():
     gh, _ = client([FakeResponse(200, {"data": {"r0": {"pullRequests": {"totalCount": 4}}, "r1": None}})])
     assert gh.open_pr_counts([("a", "x"), ("b", "y")]) == {"a/x": 4, "b/y": None}
+
+
+def test_commit_count_since_reads_last_page_from_link_header():
+    link = '<https://api.test/repos/o/r/commits?per_page=1&page=2>; rel="next", ' \
+           '<https://api.test/repos/o/r/commits?per_page=1&page=47>; rel="last"'
+    gh, _ = client([FakeResponse(200, [{"sha": "abc"}], {"Link": link})])
+    assert gh.commit_count_since("o", "r", datetime(2026, 10, 2, tzinfo=timezone.utc)) == 47
+
+
+def test_commit_count_since_single_commit_without_link_is_one():
+    gh, _ = client([FakeResponse(200, [{"sha": "abc"}])])
+    assert gh.commit_count_since("o", "r", datetime(2026, 10, 2, tzinfo=timezone.utc)) == 1
+
+
+def test_commit_count_since_empty_body_is_zero_not_none():
+    gh, _ = client([FakeResponse(200, [])])
+    assert gh.commit_count_since("o", "r", datetime(2026, 10, 2, tzinfo=timezone.utc)) == 0
+
+
+def test_commit_count_since_unreachable_repo_is_none():
+    gh, _ = client([FakeResponse(404, {})])
+    assert gh.commit_count_since("o", "r", datetime(2026, 10, 2, tzinfo=timezone.utc)) is None
+    gh, _ = client([FakeResponse(409, {})])
+    assert gh.commit_count_since("o", "r", datetime(2026, 10, 2, tzinfo=timezone.utc)) is None
+
+
+def test_commit_count_since_serialises_since_as_utc_z():
+    ist = timezone(timedelta(hours=5, minutes=30))
+    when = datetime(2026, 10, 2, 5, 30, tzinfo=ist)
+    gh, _ = client([FakeResponse(200, [])])
+    gh.commit_count_since("o", "r", when)
+    params = gh.session.calls[0]["params"]
+    assert params["since"] == "2026-10-02T00:00:00Z"
+    assert params["per_page"] == 1
 
 
 def test_commits_in_last_days_counts_per_day_not_per_week():

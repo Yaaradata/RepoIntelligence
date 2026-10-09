@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from repo_intelligence.common import config
 from repo_intelligence.common.stats import StageStats
-from repo_intelligence.external.github import GitHubClient, GitHubError, commits_in_last_days
+from repo_intelligence.external.github import GitHubClient, GitHubError
 from repo_intelligence.identity.stage import upsert_repository
 from repo_intelligence.quality_facts.facts import readme_facts, upsert_facts
 from repo_intelligence.snapshot.semver import parse_semver
@@ -44,12 +44,11 @@ ON CONFLICT (repo_id, tag) DO UPDATE SET
 
 def build_snapshot(repo: dict[str, Any], *, open_prs: int | None, contributors: int | None,
                    releases: list[dict[str, Any]], release_count: int,
-                   languages: dict[str, int], weeks: list[dict[str, Any]] | None,
+                   languages: dict[str, int], commits_7d: int | None, commits_30d: int | None,
                    now: datetime) -> dict[str, Any]:
     published = [r for r in releases if r.get("published_at") and not r.get("draft")]
     stable = [r for r in published if not r.get("prerelease")] or published
     latest = max(stable, key=lambda r: r["published_at"]) if stable else None
-    today = now.date()
     issues_and_prs = repo.get("open_issues_count")
     return {
         "repo_id": int(repo["id"]),
@@ -61,8 +60,8 @@ def build_snapshot(repo: dict[str, Any], *, open_prs: int | None, contributors: 
         "open_issues": (max(0, issues_and_prs - open_prs)
                         if issues_and_prs is not None and open_prs is not None else None),
         "contributors_count": contributors,
-        "commits_7d": commits_in_last_days(weeks, 7, today=today) if weeks is not None else None,
-        "commits_30d": commits_in_last_days(weeks, 30, today=today) if weeks is not None else None,
+        "commits_7d": commits_7d,
+        "commits_30d": commits_30d,
         "pushed_at": repo.get("pushed_at"),
         "latest_release_tag": latest["tag_name"] if latest else None,
         "latest_release_at": latest["published_at"] if latest else None,
@@ -111,7 +110,7 @@ def run_snapshot(conn, gh: GitHubClient, repos: list[dict[str, Any]], *, scope_l
                  now: datetime | None = None, dry_run: bool = False) -> StageStats:
     now = now or datetime.now(timezone.utc)
     stats = StageStats("snapshot")
-    stats.announce(f"{scope_label} date={now.date()} calls/repo≈8", len(repos))
+    stats.announce(f"{scope_label} date={now.date()} calls/repo≈9", len(repos))
     if dry_run or not repos:
         return stats
 
@@ -119,8 +118,6 @@ def run_snapshot(conn, gh: GitHubClient, repos: list[dict[str, Any]], *, scope_l
     per_release = config.setting("snapshot", "releases_per_repo", 10)
     body_chars = config.setting("snapshot", "release_body_chars", 3000)
     excerpt_chars = config.setting("snapshot", "readme_excerpt_chars", 8000)
-    retries = config.setting("snapshot", "commit_activity_retries", 3)
-    retry_sleep = config.setting("snapshot", "commit_activity_retry_sleep", 2.0)
 
     for i, row in enumerate(repos, start=1):
         try:
@@ -138,7 +135,8 @@ def run_snapshot(conn, gh: GitHubClient, repos: list[dict[str, Any]], *, scope_l
                 releases=releases,
                 release_count=gh.release_count(owner, name) if len(releases) >= per_release else len(releases),
                 languages=gh.languages(owner, name),
-                weeks=gh.commit_activity(owner, name, retries=retries, retry_sleep=retry_sleep),
+                commits_7d=gh.commit_count_since(owner, name, now - timedelta(days=7)),
+                commits_30d=gh.commit_count_since(owner, name, now - timedelta(days=30)),
                 now=now,
             )
             conn.execute(SNAPSHOT_SQL, snap)

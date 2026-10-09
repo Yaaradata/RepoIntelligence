@@ -9,6 +9,7 @@ API traps handled here:
   * watchers_count duplicates stargazers_count → callers use subscribers_count.
   * open_issues_count includes PRs → open_pr_counts() supplies the PR count.
   * /stats/commit_activity answers 202 while GitHub computes → retried, then None.
+    First contact (every new-lane repo) is always a 202; use commit_count_since.
 """
 
 from __future__ import annotations
@@ -218,10 +219,37 @@ class GitHubClient:
         data = self._get_json(f"/repos/{owner}/{name}/contents/{path}")
         return [item["name"] for item in data] if isinstance(data, list) else []
 
+    def commit_count_since(self, owner: str, name: str, since: datetime) -> int | None:
+        """Exact commits on the default branch since `since`.
+
+        Uses /commits rather than /stats/commit_activity: the stats endpoints
+        are computed lazily per repo and answer 202 on first contact, which is
+        every repo on the new lane. This endpoint is computed on demand.
+
+        per_page=1 makes the Link header's last page number the commit count,
+        so no pagination is needed. Returns None only when the repo is
+        unreachable; 0 is a real answer.
+        """
+        resp = self._request(
+            "GET", f"/repos/{owner}/{name}/commits",
+            params={"since": since.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "per_page": 1},
+        )
+        if resp is None:
+            return None          # 404 / 409 empty repo / 451 blocked
+        last = _last_page(resp.headers.get("Link"))
+        if last is not None:
+            return last
+        return len(resp.json() or [])    # single page: 0 or 1 commits
+
     def commit_activity(
         self, owner: str, name: str, *, retries: int = 3, retry_sleep: float = 2.0
     ) -> list[dict[str, Any]] | None:
-        """52 weeks of per-day commits; None if GitHub is still computing after retries."""
+        """52 weeks of per-day commits; None if GitHub is still computing after retries.
+
+        Not suitable for first contact — see commit_count_since. Cheaper once
+        GitHub has already computed the series for a warm repository.
+        """
         for _ in range(retries + 1):
             resp = self._request("GET", f"/repos/{owner}/{name}/stats/commit_activity", accept_202=True)
             if resp is None:

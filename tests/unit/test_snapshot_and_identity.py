@@ -15,7 +15,8 @@ NOW = datetime(2026, 10, 4, tzinfo=timezone.utc)
 
 
 def snap(**kw):
-    base = dict(open_prs=8, contributors=5, releases=[], release_count=0, languages={}, weeks=None, now=NOW)
+    base = dict(open_prs=8, contributors=5, releases=[], release_count=0, languages={},
+                commits_7d=None, commits_30d=None, now=NOW)
     base.update(kw)
     return build_snapshot(REPO, **base)
 
@@ -48,6 +49,17 @@ def test_semver_parsing():
     assert parse_semver("release-2.0") == (2, 0, 0)
     assert parse_semver("1.4.0-rc1") == (1, 4, 0)
     assert parse_semver("nightly") == (None, None, None)
+
+
+def test_build_snapshot_stores_the_commit_counts_it_is_given():
+    s = snap(commits_7d=4, commits_30d=11)
+    assert s["commits_7d"] == 4 and s["commits_30d"] == 11
+
+
+def test_zero_commits_is_stored_as_zero_not_null():
+    s = snap(commits_7d=0, commits_30d=0)
+    assert s["commits_7d"] == 0 and s["commits_30d"] == 0
+    assert s["commits_7d"] is not None
 
 
 def test_identity_row_keys_on_numeric_id_and_normalises_licence():
