@@ -1,4 +1,5 @@
-# Non-secret tunables. Environment variables of the same (upper-cased) name win.
+# Non-secret tunables. An environment variable named SECTION_KEY wins
+# (e.g. ELIGIBILITY_MIN_STARS overrides eligibility.min_stars).
 # Thresholds here are defaults from the V1 spec; change values, not code.
 
 discovery:
@@ -54,3 +55,18 @@ cooldown_days:
   SHOWHN_SURGE: 90
   ADOPTION_MILESTONE: 120
   FIRST_SEEN: null                 # once only
+
+llm:
+  screen_model: z-ai/glm-5.3-flash
+  digest_model: z-ai/glm-5.3-flash
+  editorial_model: openai/gpt-5.6-sol
+  selection_model: openai/gpt-5.6-sol
+  screen_batch_size: 10
+  editorial_batch_size: 5
+  concurrency: 4
+
+budget:
+  max_cost_usd_per_run: 10
+  daily_spend_cap: 3
+  monthly_spend_cap: 40
+  editorial_top_n: 40
