@@ -137,3 +137,15 @@ CRATES_API_BASE = env("CRATES_API_BASE", "https://crates.io/api/v1")
 DOCKERHUB_API_BASE = env("DOCKERHUB_API_BASE", "https://hub.docker.com/v2")
 REGISTRY_RATE_SLEEP = env_float("REGISTRY_RATE_SLEEP", 1.0)
 HTTP_USER_AGENT = env("HTTP_USER_AGENT", "RepoIntelligenceV1 (TheNeural newsletter)")
+
+
+def database_url() -> str:
+    """Resolved when a connection is opened, not when this module is imported."""
+    url = env("DATABASE_URL")
+    if not url:
+        raise RuntimeError("DATABASE_URL is not set")
+    return url
+
+
+def github_token() -> str | None:
+    return env("GITHUB_TOKEN")

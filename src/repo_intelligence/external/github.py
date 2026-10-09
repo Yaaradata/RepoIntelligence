@@ -74,7 +74,7 @@ class GitHubClient:
         rate_sleep: float | None = None,
         search_sleep: float | None = None,
     ):
-        token = token if token is not None else config.env("GITHUB_TOKEN")
+        token = token if token is not None else config.github_token()
         if not token:
             raise RuntimeError("GITHUB_TOKEN is not set")
         self.base_url = (base_url or config.GITHUB_API_BASE).rstrip("/")

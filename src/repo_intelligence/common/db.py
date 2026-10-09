@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
 from typing import Iterator
 
 import psycopg
 from psycopg.rows import dict_row
 
+from repo_intelligence.common.config import database_url as _database_url
+
 
 def database_url() -> str:
-    url = os.getenv("DATABASE_URL")
-    if not url:
-        raise RuntimeError("DATABASE_URL is not set")
-    return url
+    return _database_url()
 
 
 @contextmanager
