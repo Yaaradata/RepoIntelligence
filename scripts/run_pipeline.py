@@ -28,6 +28,9 @@ def main() -> int:
     ap.add_argument("--trigger", default="manual", choices=["manual", "cron"])
     args = ap.parse_args()
 
+    from repo_intelligence.common.config import validate_setting_overrides
+    validate_setting_overrides()
+
     from repo_intelligence.discovery.lanes import run_discovery
     from repo_intelligence.external.registries import RegistryClient
     from repo_intelligence.identity.stage import resolve_candidates

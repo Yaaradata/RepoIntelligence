@@ -1,7 +1,9 @@
 """Environment + config/settings.yaml loading.
 
-Environment variables win over settings.yaml. A `.env` at the project root is
-read if present (values already in the environment are never overwritten).
+Secrets and rate limits come from the environment. Tunables come from
+settings.yaml and can be overridden by a ``SECTION_KEY`` variable. A ``.env``
+at the project root is read if present (values already in the environment are
+never overwritten).
 """
 
 from __future__ import annotations
@@ -54,18 +56,65 @@ def settings() -> dict[str, Any]:
 
 
 def setting(section: str, key: str, default: Any = None) -> Any:
-    """settings.yaml value, overridden by an env var named KEY in upper case."""
-    override = os.getenv(key.upper())
+    """Value from settings.yaml, overridable by `SECTION_KEY` in the environment.
+
+    The override name carries the section (`eligibility.min_stars` →
+    `ELIGIBILITY_MIN_STARS`) so that two sections sharing a key name cannot
+    collide on one variable. The override is coerced to the type of the YAML
+    value, or of `default` when the key is absent from YAML; without either, a
+    bare string would reach a numeric comparison and fail far from its cause,
+    so that case raises here instead.
+    """
     base = (settings().get(section) or {}).get(key, default)
+    override = os.getenv(f"{section}_{key}".upper())
     if override in (None, ""):
         return base
-    if isinstance(base, bool):
-        return override.lower() in {"1", "true", "yes"}
-    if isinstance(base, int):
+
+    template = base if base is not None else default
+    if isinstance(template, bool):
+        return override.strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(template, int):
         return int(override)
-    if isinstance(base, float):
+    if isinstance(template, float):
         return float(override)
-    return override
+    if isinstance(template, str):
+        return override
+    if template is None:
+        raise RuntimeError(
+            f"{section}_{key}".upper() + " is set, but "
+            f"'{section}.{key}' has no value in settings.yaml and no default, "
+            "so its type cannot be determined. Add it to settings.yaml."
+        )
+    raise RuntimeError(
+        f"{section}_{key}".upper() + f" cannot override a {type(template).__name__}"
+    )
+
+
+def validate_setting_overrides() -> None:
+    """Fail on a SECTION_KEY variable whose key does not exist in that section.
+
+    A misspelled override is otherwise silent — the pipeline runs with the YAML
+    value and nothing says the variable was ignored.
+    """
+    known: set[str] = set()
+    prefixes: dict[str, str] = {}
+    for section, body in settings().items():
+        if not isinstance(body, dict):
+            continue
+        prefixes[section.upper() + "_"] = section
+        for key in body:
+            known.add(f"{section}_{key}".upper())
+
+    unknown = [
+        name for name in os.environ
+        if any(name.startswith(p) for p in prefixes) and name not in known
+    ]
+    if unknown:
+        raise RuntimeError(
+            "unrecognised settings override(s) in the environment: "
+            + ", ".join(sorted(unknown))
+            + ". Check spelling against config/settings.yaml, or remove them."
+        )
 
 
 @lru_cache(maxsize=1)

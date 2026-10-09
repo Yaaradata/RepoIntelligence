@@ -98,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    config.validate_setting_overrides()
     with connect() as conn:
         run_id = runs.start_pipeline_run(conn, f"stage.{args.stage}", trigger_type=args.trigger,
                                          metadata={"scope": args.scope, "dry_run": args.dry_run})
