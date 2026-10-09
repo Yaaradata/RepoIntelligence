@@ -23,13 +23,13 @@ boost_caps:
   popularity: 0.5
   total:      1.0
 
-lane_weights:          # which signals matter per lane (spec values; accelerating sums to 1.10)
+lane_weights:          # which signals matter per lane. accelerating sums to 1.00.
   new:          {stars_lifetime: 0.00, star_growth: 0.15, accel: 0.10,
                  docs: 0.25, commits: 0.15, releases: 0.05,
                  contributors: 0.05, adoption: 0.00, showhn: 0.25}
-  accelerating: {stars_lifetime: 0.05, star_growth: 0.30, accel: 0.20,
+  accelerating: {stars_lifetime: 0.00, star_growth: 0.30, accel: 0.20,
                  docs: 0.10, commits: 0.10, releases: 0.10,
-                 contributors: 0.10, adoption: 0.05, showhn: 0.10}
+                 contributors: 0.10, adoption: 0.05, showhn: 0.05}
   established:  {stars_lifetime: 0.10, star_growth: 0.10, accel: 0.05,
                  docs: 0.10, commits: 0.05, releases: 0.30,
                  contributors: 0.10, adoption: 0.20, showhn: 0.05}
